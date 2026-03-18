@@ -1,0 +1,80 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function membershipDocument() {
+      return get(/databases/$(database)/documents/memberships/$(request.auth.uid));
+    }
+
+    function hasMembershipDocument() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/memberships/$(request.auth.uid));
+    }
+
+    function isTenantMember(tenantId) {
+      return hasMembershipDocument() &&
+        membershipDocument().data.userId == request.auth.uid &&
+        membershipDocument().data.tenantId == tenantId;
+    }
+
+    match /tenants/{tenantId} {
+      allow get, list: if isTenantMember(tenantId);
+
+      allow create: if isAuthenticated() &&
+        request.resource.data.ownerUserId == request.auth.uid;
+
+      allow update, delete: if isTenantMember(tenantId);
+    }
+
+    match /memberships/{membershipId} {
+      allow get: if isAuthenticated() &&
+        membershipId == request.auth.uid;
+
+      allow list: if false;
+
+      allow create: if isAuthenticated() &&
+        membershipId == request.auth.uid &&
+        request.resource.data.userId == request.auth.uid;
+
+      allow update, delete: if false;
+    }
+
+    match /connections/{connectionId} {
+      allow get, list: if isTenantMember(resource.data.tenantId);
+
+      allow create: if isAuthenticated() &&
+        isTenantMember(request.resource.data.tenantId) &&
+        request.resource.data.createdBy == request.auth.uid;
+
+      allow update, delete: if isTenantMember(resource.data.tenantId);
+    }
+
+    match /contacts/{contactId} {
+      allow get, list: if isTenantMember(resource.data.tenantId);
+
+      allow create: if isAuthenticated() &&
+        isTenantMember(request.resource.data.tenantId) &&
+        request.resource.data.createdBy == request.auth.uid;
+
+      allow update, delete: if isTenantMember(resource.data.tenantId);
+    }
+
+    match /messages/{messageId} {
+      allow get, list: if isTenantMember(resource.data.tenantId);
+
+      allow create: if isAuthenticated() &&
+        isTenantMember(request.resource.data.tenantId) &&
+        request.resource.data.createdBy == request.auth.uid;
+
+      allow update, delete: if isTenantMember(resource.data.tenantId);
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
